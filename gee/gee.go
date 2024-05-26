@@ -3,6 +3,7 @@ package gee
 import (
 	"log"
 	"net/http"
+	"strings"
 )
 
 // HandlerFunc defines the request handler used by gee
@@ -29,6 +30,11 @@ func New() *Engine {
 	engine.RouterGroup = &RouterGroup{engine: engine}
 	engine.groups = []*RouterGroup{engine.RouterGroup}
 	return engine
+}
+
+// Use is defined to add middleware to the group
+func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
+	group.middlewares = append(group.middlewares, middlewares...)
 }
 
 // Group is defined to create a new RouterGroup
@@ -67,12 +73,14 @@ func (engine *Engine) Run(addr string) (err error) {
 
 // Engine implements http.Handler (method ServeHTTP)
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// key := req.Method + "-" + req.URL.Path
-	// if handler, ok := engine.router[key]; ok {
-	// 	handler(w, req)
-	// } else {
-	// 	fmt.Fprintf(w, "404 NOT FOUND: %s\n", req.URL) // 将 404 NOT FOUND 的消息写入 HTTP 响应，消息中包含了请求的 URL。
-	// }
+	var middlewares []HandlerFunc
+	for _, group := range engine.groups {
+		if strings.HasPrefix(req.URL.Path, group.prefix) {
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
+
 	c := newContext(w, req)
+	c.handlers = middlewares
 	engine.router.handle(c)
 }
